@@ -5,11 +5,11 @@
 void queue_append (queue_t **queue, queue_t *elem)
 {
 	if(queue == NULL)
-		fprintf(stderr, "%s", "ERRO\nFila nao existe\n");
+		fprintf(stderr, "%s", "ERRO: FILA NAO EXISTE\n");
 	else if(elem == NULL)
-		fprintf(stderr, "%s", "ERRO\nElemento nao existe\n");
+		fprintf(stderr, "%s", "ERRO: ELEMENTO NAO EXISTE\n");
 	else if(elem->next != NULL)
-		fprintf(stderr, "%s", "ERRO\nElemento ja pertence a uma fila\n");
+		fprintf(stderr, "%s", "ERRO: ELEMENTO JA PERTENCE A UMA FILA\n");
 	else
 	{
 		if(*queue == NULL)//fila vazia
@@ -25,7 +25,8 @@ void queue_append (queue_t **queue, queue_t *elem)
 			aux->next = elem;
 			elem->prev = aux;
 			elem->next = *queue;
-			*queue->prev = elem;
+			aux = *queue;
+			aux->prev = elem;
 		}
 	}
 }
@@ -33,11 +34,11 @@ void queue_append (queue_t **queue, queue_t *elem)
 
 int queue_size (queue_t *queue)
 {
-	if(*queue == NULL)
+	if(queue == NULL)
 		return 0;
-	queue_t *aux = *queue->next;
+	queue_t *aux = queue->next;
 	int i = 1;
-	while(aux != *queue)
+	while(aux != queue)
 	{	
 		i += 1;
 		aux = aux->next;
@@ -49,15 +50,15 @@ int queue_size (queue_t *queue)
 queue_t *queue_remove (queue_t **queue, queue_t *elem)
 {
 	if(queue == NULL){
-		fprintf(stderr, "%s", "ERRO\nFila nao existe\n");
+		fprintf(stderr, "%s", "ERRO: FILA NAO EXISTE\n");
 		return NULL;
 	}
 	else if(*queue == NULL){
-		fprintf(stderr, "%s", "ERRO\nFila vazia\n");
+		fprintf(stderr, "%s", "ERRO: FILA VAZIA\n");
 		return NULL;
 	}
 	else if(elem == NULL){
-		fprintf(stderr, "%s", "ERRO\nElemento nao existe\n");
+		fprintf(stderr, "%s", "ERRO: ELEMENTO NAO EXISTE\n");
 		return NULL;
 	}
 	else //verificar se pertence a fila
@@ -72,7 +73,7 @@ queue_t *queue_remove (queue_t **queue, queue_t *elem)
 			aux = aux->next;		
 		}
 		if(i == tamFila + 1){
-			fprintf(stderr, "%s", "ERRO\nElemento nao pertence a fila\n");
+			fprintf(stderr, "%s", "ERRO: ELEMENTO NAO PERTENCE A FILA\n");
 			return NULL;	
 		}
 		if(tamFila == 1)
@@ -92,15 +93,18 @@ queue_t *queue_remove (queue_t **queue, queue_t *elem)
 void queue_print (char *name, queue_t *queue, void print_elem (void*) )
 {
 	printf("%s\n", name);
-	if(*queue == NULL)
-		printf("%s\n", "Fila vazia");
+	if(queue == NULL)
+		printf("[]\n");
 	else
 	{
-		queue_t *aux = *queue;
+		printf("[");
+		queue_t *aux = queue;
 		do{
 			print_elem(aux);
+			printf(" ");
 			aux = aux->next;	
-		}while(aux != *queue)
+		}while(aux != queue);
+		printf("]\n");
 	}	
 }
 
