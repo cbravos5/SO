@@ -1,3 +1,6 @@
+//NOME: Chrystopher Naves Bravos
+//GRR: 20186313
+
 #include "queue.h"
 #include <stdio.h>
 
