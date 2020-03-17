@@ -1,5 +1,4 @@
-//NOME: Chrystopher Naves Bravos
-//GRR: 20186313
+// GRR20186313 Chrystopher Naves Bravos
 
 #include "queue.h"
 #include <stdio.h>
