@@ -59,10 +59,16 @@ int task_getprio (task_t *task) ;
 
 // operações de sincronização ==================================================
 
+//acorda todas tarefas que estao esperando termino da tarefa
+task_t* awake_queue(task_t *q);
+
 // a tarefa corrente aguarda o encerramento de outra task
 int task_join (task_t *task) ;
 
 // operações de gestão do tempo ================================================
+
+//realiza os calculos finais e imprime os tempos da tarefa
+void print_time();
 
 //trata a tarefa corrente de acordo com o numero de ticks
 void tick_handler(int signal);
@@ -76,9 +82,22 @@ void verify_sleeping();
 // retorna o relógio atual (em milisegundos)
 unsigned int systime () ;
 
+//suspende uma tarefa
+task_t * t_suspend(task_t *q);
+
+//acorda uma tarefa da fila de semaforos
+task_t * t_awake(task_t *q);
+
+
 // operações de IPC ============================================================
 
 // semáforos
+
+//trava variavel de espera ocupada
+void enter_cs (int *lock);
+
+//libera variavel de espera ocupada
+void leave_cs (int *lock);
 
 // cria um semáforo com valor inicial "value"
 int sem_create (semaphore_t *s, int value) ;

@@ -48,6 +48,22 @@ struct itimerval default_timer ;
 //estrutura para gerar um temporizador nulo
 struct itimerval zero_timer = {0};
 
+//variavel para gerar espera ocupada nas operacoes de semaforo
+int lock = 0 ;
+
+
+void enter_cs (int *lock)
+{
+  //espera ocupada
+  while (__sync_fetch_and_or (lock, 1)) ;
+}
+ 
+void leave_cs (int *lock)
+{
+  *lock = 0 ;
+}
+
+
 task_t* scheduler()
 {
 	//Primeiro verifica-se o tamanho da fila de prontas para evitar problemas
@@ -206,32 +222,41 @@ int task_create (task_t *task, void (*start_func)(void *), void *arg)
 	return task->id;
 }	
 
+task_t* awake_queue(task_t *q)
+{
+	if (q == NULL)
+		return q;
+	//libera tarefas que estao aguardando termino
+	task_t* aux = NULL;
+	while(queue_size((queue_t*)q) > 0)
+	{
+		aux = q;
+		aux = (task_t*)queue_remove((queue_t**)&q,(queue_t*)aux);
+		aux->state = 'p';
+		queue_append((queue_t**)&prontas,(queue_t*)aux);
+	}
+	return q;
+}
+
+void print_time()
+{
+	task_act->proc_time = task_act->proc_time + (system_time - task_act->proc_time_in);
+	task_act->exec_time = system_time - task_act->exec_time;
+	printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n",
+	task_act->id, task_act->exec_time, task_act->proc_time, task_act->activate_count);
+}
+
 void task_exit (int exitCode)
 {
 	#ifdef DEBUG
 	printf("task_exit: terminando tarefa %d\n", task_act->id); 
 	#endif
 	//
-	//libera tarefas que estao aguardando termino
-	task_t* aux = NULL;
-	while(queue_size((queue_t*)task_act->waitingQueue) > 0)
-	{
-		aux = task_act->waitingQueue;
-		aux = (task_t*)queue_remove((queue_t**)&task_act->waitingQueue,(queue_t*)aux);
-		aux->state = 'p';
-		queue_append((queue_t**)&prontas,(queue_t*)aux);
-	}
+	task_act->waitingQueue = awake_queue(task_act->waitingQueue);
+	//
+	print_time();
+	//
 	task_act->exit_code = exitCode;
-
-	/////////////////////////////////////////////////////////////////////////////////
-	//Impressao conteudo de temporizacao
-	/////////////////////////////////////////////////////////////////////////////////
-	task_act->proc_time = task_act->proc_time + (system_time - task_act->proc_time_in);
-	task_act->exec_time = system_time - task_act->exec_time;
-	printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n",
-				task_act->id, task_act->exec_time, task_act->proc_time, task_act->activate_count);
-	/////////////////////////////////////////////////////////////////////////////////
-
 	if (task_act->type != 's')//Verificar se a tarefa terminada eh uma tarefa de usuario, se for, 
 	{						  //decrementa user_tasks e volta pro dispatcher
 		task_act->state = 't';			
@@ -290,15 +315,14 @@ int task_getprio (task_t *task)
 
 int task_join (task_t *task)
 {
+	if(task == NULL)
+		return -1;
 	if(task->state == 't')
 		return -1;
 	//tarefa retirada da fila de pronts e colocada na fila de espera com estado atualizado
 	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
-	queue_remove((queue_t**)&prontas,(queue_t*)task_act);
-	task_act->state = 's';
-	queue_append((queue_t**)&task->waitingQueue,(queue_t*)task_act);
+	task->waitingQueue = t_suspend(task->waitingQueue);
 	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
-
 	task_switch(&disp);
 	return task->exit_code;
 }
@@ -346,5 +370,124 @@ void verify_sleeping()
 unsigned int systime()
 {
 	return system_time;
+}
+
+task_t * t_suspend(task_t *q)
+{
+	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
+	queue_remove((queue_t**)&prontas,(queue_t*)task_act);
+	task_act->state = 's';
+	queue_append((queue_t**)&q,(queue_t*)task_act);
+	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
+	return q;
+}
+
+task_t * t_awake(task_t *q)
+{
+	if(q == NULL)
+		return q;
+	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
+	task_t* aux = NULL;
+	aux = q;
+	aux = (task_t*)queue_remove((queue_t**)&q,(queue_t*)aux);
+	aux->state = 'p';
+	queue_append((queue_t**)prontas,(queue_t*)aux);
+	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
+	return q;
+}
+
+int sem_create (semaphore_t *s, int value)
+{
+	if(s == NULL)
+		return -1;
+	if (s->active == 1)
+		return -1;
+	s->active = 1;
+	s->count = value;
+	s->waitingQueue = NULL;
+	s->exit_code = 0;
+	s->lock = 0;
+	return 0;
+}
+
+
+int sem_down (semaphore_t *s)
+{
+	enter_cs(&s->lock);
+	if(s == NULL)
+	{
+		leave_cs(&s->lock);
+		return -1;
+	}
+	if(s->active != 1)
+	{
+		leave_cs(&s->lock);
+		return -1;
+	}
+	s->count--;
+	if(s->count < 0)
+	{	
+		s->waitingQueue = t_suspend(s->waitingQueue);
+		leave_cs(&s->lock);
+		task_switch(&disp);
+	}
+	else
+	{
+		leave_cs(&s->lock);
+	}
+	return s->exit_code;
+}
+
+
+int sem_up (semaphore_t *s)
+{
+	enter_cs(&s->lock);
+	if(s == NULL)
+	{
+		leave_cs(&s->lock);
+		return -1;
+	}
+	if(s->active != 1)
+	{
+		leave_cs(&s->lock);
+		return -1;
+	}
+	s->count++;
+	if(s->count <= 0)
+	{
+		s->waitingQueue = t_awake(s->waitingQueue);	
+	} 
+	leave_cs(&s->lock);
+	return 0;
+}
+
+int sem_destroy (semaphore_t *s)
+{
+	enter_cs(&s->lock);
+	if(s == NULL)
+	{
+		leave_cs(&s->lock);
+		return -1;
+	}
+	if(s->active != 1)
+	{
+		leave_cs(&s->lock);
+		return -1;
+	}
+	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
+	//libera tarefas que estao aguardando semaforo
+	task_t* aux = NULL;
+	while(queue_size((queue_t*)s->waitingQueue) > 0)
+	{
+		aux = s->waitingQueue;
+		aux = (task_t*)queue_remove((queue_t**)&s->waitingQueue,(queue_t*)aux);
+		aux->state = 'p';
+		queue_append((queue_t**)&prontas,(queue_t*)aux);
+	}
+	s->exit_code = -1;
+	s->active = 0;
+	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
+	leave_cs(&s->lock);
+	return 0;
 }
 
