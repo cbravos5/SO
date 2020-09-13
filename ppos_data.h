@@ -56,10 +56,23 @@ typedef struct
   // preencher quando necessário
 } barrier_t ;
 
+//estrutura para um buffer circular
+typedef struct 
+{
+  int max;
+  int read;
+  int write;
+  int size;
+  int full;
+  void *buffer;
+}CircularBuffer;
+
 // estrutura que define uma fila de mensagens
 typedef struct
 {
-  // preencher quando necessário
+  semaphore_t s_item,s_vaga,s_buffer;
+  CircularBuffer *buff;
+  char state;
 } mqueue_t ;
 
 #endif

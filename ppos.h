@@ -73,6 +73,8 @@ void print_time();
 //trata a tarefa corrente de acordo com o numero de ticks
 void tick_handler(int signal);
 
+void tick_handler_stop(int signal);
+
 // suspende a tarefa corrente por t milissegundos
 void task_sleep (int t) ;
 
@@ -137,6 +139,18 @@ int barrier_join (barrier_t *b) ;
 int barrier_destroy (barrier_t *b) ;
 
 // filas de mensagens
+
+//Cria um buffer circular de mensagens
+CircularBuffer* Init_Buffer(int max,int size);
+
+//le o primeiro elemento de um buffer circular
+int read_buffer(CircularBuffer* C_buffer, void*value);
+
+//escreve na ultima posicao de um buffer circular
+int write_buffer(CircularBuffer* C_buffer,void*value);
+
+//retorna a quantidade de items em um buffer circular
+int size_buffer(CircularBuffer* C_buffer);
 
 // cria uma fila para até max mensagens de size bytes cada
 int mqueue_create (mqueue_t *queue, int max, int size) ;

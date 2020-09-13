@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/time.h>
+#include <errno.h>
 #define STACKSIZE 32768
 #define TIME_TICK 1000
 
@@ -40,13 +42,12 @@ int system_time = 0;
 int ticks = 20;
 
 //estrutura que define um tratador de sinal (deve ser global ou static)
-struct sigaction action ;
+struct sigaction action1 ;
+
+struct sigaction action2 ;
 
 //estrutura de inicialização to timer
 struct itimerval default_timer ;
-
-//estrutura para gerar um temporizador nulo
-struct itimerval zero_timer = {0};
 
 //variavel para gerar espera ocupada nas operacoes de semaforo
 int lock = 0 ;
@@ -151,14 +152,18 @@ void ppos_init ()
 	
 
 	//act handler
-	action.sa_handler = tick_handler;
-  	sigemptyset (&action.sa_mask) ;
-  	action.sa_flags = 0 ;
-  	if (sigaction (SIGALRM, &action, 0) < 0)
+	action1.sa_handler = tick_handler;
+  	sigemptyset (&action1.sa_mask) ;
+  	action1.sa_flags = 0 ;
+  	if (sigaction (SIGALRM, &action1, 0) < 0)
   	{
     	perror ("Erro em sigaction: ") ;
     	exit (1) ;
   	}
+
+  	action2.sa_handler = tick_handler_stop;
+  	sigemptyset (&action2.sa_mask) ;
+  	action2.sa_flags = 0 ;
 
 	//tick set
 	default_timer.it_value.tv_usec = TIME_TICK;      // primeiro disparo, em micro-segundos
@@ -320,12 +325,19 @@ int task_join (task_t *task)
 	if(task->state == 't')
 		return -1;
 	//tarefa retirada da fila de pronts e colocada na fila de espera com estado atualizado
-	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
+	sigaction (SIGALRM, &action2, 0);
 	task->waitingQueue = t_suspend(task->waitingQueue);
-	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
+	sigaction (SIGALRM, &action1, 0);
 	task_switch(&disp);
 	return task->exit_code;
 }
+
+
+void tick_handler_stop(int signal)
+{
+	system_time++;
+}
+
 
 void tick_handler(int signal)
 {
@@ -374,11 +386,11 @@ unsigned int systime()
 
 task_t * t_suspend(task_t *q)
 {
-	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
+	sigaction (SIGALRM, &action2, 0);
 	queue_remove((queue_t**)&prontas,(queue_t*)task_act);
 	task_act->state = 's';
 	queue_append((queue_t**)&q,(queue_t*)task_act);
-	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
+	sigaction (SIGALRM, &action1, 0);
 	return q;
 }
 
@@ -386,13 +398,13 @@ task_t * t_awake(task_t *q)
 {
 	if(q == NULL)
 		return q;
-	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
+	sigaction (SIGALRM, &action2, 0);
 	task_t* aux = NULL;
 	aux = q;
 	aux = (task_t*)queue_remove((queue_t**)&q,(queue_t*)aux);
 	aux->state = 'p';
 	queue_append((queue_t**)prontas,(queue_t*)aux);
-	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
+	sigaction (SIGALRM, &action1, 0);
 	return q;
 }
 
@@ -474,7 +486,7 @@ int sem_destroy (semaphore_t *s)
 		leave_cs(&s->lock);
 		return -1;
 	}
-	setitimer (ITIMER_REAL, &zero_timer, 0);//temporizador nulo para evitar preempcao
+	sigaction (SIGALRM, &action2, 0);
 	//libera tarefas que estao aguardando semaforo
 	task_t* aux = NULL;
 	while(queue_size((queue_t*)s->waitingQueue) > 0)
@@ -486,8 +498,126 @@ int sem_destroy (semaphore_t *s)
 	}
 	s->exit_code = -1;
 	s->active = 0;
-	setitimer (ITIMER_REAL, &default_timer, 0);//retorna ao temporizador original
+	sigaction (SIGALRM, &action1, 0);
 	leave_cs(&s->lock);
 	return 0;
 }
 
+CircularBuffer* Init_Buffer(int max,int size)
+{
+	CircularBuffer* p = malloc(sizeof(CircularBuffer*));
+	if(p == NULL)
+		return NULL;
+	p->max = max;
+	p->write = p->read = 0;
+	p->size = size;
+	p->full = 0;
+	p->buffer = malloc(max*sizeof(size));
+	if (p->buffer == NULL)
+		return NULL;
+	return p;
+}
+
+int read_buffer(CircularBuffer* C_buffer, void*value)
+{
+	if(C_buffer == NULL) return -1;
+	int aux = C_buffer->read;
+	if (C_buffer->read == C_buffer->max-1) {C_buffer->read = 0;}
+	else {C_buffer->read++;}
+	memcpy(value , C_buffer->buffer + C_buffer->size*aux ,C_buffer->size);
+	C_buffer->full = 0;
+	return 0;
+}
+
+int write_buffer(CircularBuffer* C_buffer,void*value)
+{
+	if(C_buffer == NULL) return -1;
+	int aux = C_buffer->write;
+	if (C_buffer->write == C_buffer->max-1) {C_buffer->write = 0;}
+	else {C_buffer->write++;}
+
+	memcpy(C_buffer->buffer+C_buffer->size*aux, value, C_buffer->size);
+	C_buffer->full = (C_buffer->read == C_buffer->write);
+	return 0;
+}
+
+int size_buffer(CircularBuffer* C_buffer)
+{
+	if(C_buffer == NULL) return -1;
+	if(C_buffer->full == 0)
+	{
+		if(C_buffer->write >= C_buffer->read)
+			return (C_buffer->write - C_buffer->read);
+		else
+			return (C_buffer->max + C_buffer->write - C_buffer->read);
+	}
+	return C_buffer->max;
+}
+
+int mqueue_create (mqueue_t *queue, int max, int size)
+{
+	if(queue == NULL) return -1;
+	if(sem_create(&queue->s_item,0) ||
+	   sem_create(&queue->s_vaga,max) ||
+	   sem_create(&queue->s_buffer,1))
+		return -1;
+	queue->buff = Init_Buffer(max,size);
+	if(queue->buff == NULL)
+		return -1;
+	queue->state = 'r';
+	return 0;
+}
+
+
+int mqueue_send (mqueue_t *queue, void *msg)
+{
+	printf("Tarefa %d enviando mensagem\n",task_act->id);
+	if(queue->state == 't') return -1;
+	if(sem_down(&queue->s_vaga)) return -1;
+	if(sem_down(&queue->s_buffer)) return -1;
+	if(write_buffer(queue->buff,msg)) return -1;
+	if(sem_up(&queue->s_buffer)) return -1;
+	if(sem_up(&queue->s_item)) return -1;
+	if(task_act->id == 2)
+		printf("Tarefa %d enviou mensagem %f\n",task_act->id,*(double*)msg);
+	else
+		printf("Tarefa %d enviou mensagem %d\n",task_act->id,*(int*)msg);
+	return 0;
+}
+
+
+int mqueue_recv (mqueue_t *queue, void *msg)
+{
+	printf("Tarefa %d recebendo mensagem\n",task_act->id);
+	if(queue->state == 't') return -1;
+	if(sem_down(&queue->s_item)) return -1;
+	if(sem_down(&queue->s_buffer)) return -1;
+	if(read_buffer(queue->buff,msg));
+	if(sem_up(&queue->s_buffer)) return -1;
+	if(sem_up(&queue->s_vaga)) return -1;
+	if(task_act->id > 2)
+		printf("Tarefa %d recebeu mensagem %f\n",task_act->id,*(double*)msg);
+	else
+		printf("Tarefa %d recebeu mensagem %d\n",task_act->id,*(int*)msg);
+	return 0;
+}
+
+
+int mqueue_destroy (mqueue_t *queue)
+{
+	if(queue->state == 't') return -1;
+	if(sem_destroy(&queue->s_item)) return -1;
+	if(sem_destroy(&queue->s_vaga)) return -1;
+	if(sem_destroy(&queue->s_buffer)) return -1;
+	queue->state = 't';
+	//free(queue->buff);
+	//free(queue);
+	return 0;	
+}
+
+
+int mqueue_msgs (mqueue_t *queue)
+{
+	if(queue->state == 't') return -1;
+	return size_buffer(queue->buff);
+}
