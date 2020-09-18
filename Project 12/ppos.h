@@ -1,4 +1,8 @@
-//GRR20186313 Chrystopher Naves Bravos
+// PingPongOS - PingPong Operating System
+// Prof. Carlos A. Maziero, DINF UFPR
+// Versão 1.2 -- Outubro de 2016
+
+// Interface do núcleo para as aplicações
 
 #ifndef __PPOS__
 #define __PPOS__
@@ -21,10 +25,6 @@
 #endif
 
 // funções gerais ==============================================================
-task_t* scheduler();
-
-void dispatcher();
-
 
 // Inicializa o sistema operacional; deve ser chamada no inicio do main()
 void ppos_init () ;
@@ -59,47 +59,20 @@ int task_getprio (task_t *task) ;
 
 // operações de sincronização ==================================================
 
-//acorda todas tarefas que estao esperando termino da tarefa
-task_t* awake_queue(task_t *q);
-
 // a tarefa corrente aguarda o encerramento de outra task
 int task_join (task_t *task) ;
 
 // operações de gestão do tempo ================================================
 
-//realiza os calculos finais e imprime os tempos da tarefa
-void print_time();
-
-//trata a tarefa corrente de acordo com o numero de ticks
-void tick_handler(int signal);
-
-void tick_handler_stop(int signal);
-
 // suspende a tarefa corrente por t milissegundos
 void task_sleep (int t) ;
-
-//verifica a fila de tarefas dormindo para saber se precisa retirar alguma
-void verify_sleeping();
 
 // retorna o relógio atual (em milisegundos)
 unsigned int systime () ;
 
-//suspende uma tarefa
-task_t * t_suspend(task_t *q);
-
-//acorda uma tarefa da fila de semaforos
-task_t * t_awake(task_t *q);
-
-
 // operações de IPC ============================================================
 
 // semáforos
-
-//trava variavel de espera ocupada
-void enter_cs (int *lock);
-
-//libera variavel de espera ocupada
-void leave_cs (int *lock);
 
 // cria um semáforo com valor inicial "value"
 int sem_create (semaphore_t *s, int value) ;
@@ -139,18 +112,6 @@ int barrier_join (barrier_t *b) ;
 int barrier_destroy (barrier_t *b) ;
 
 // filas de mensagens
-
-//Cria um buffer circular de mensagens
-CircularBuffer* Init_Buffer(int max,int size);
-
-//le o primeiro elemento de um buffer circular
-int read_buffer(CircularBuffer* C_buffer, void*value);
-
-//escreve na ultima posicao de um buffer circular
-int write_buffer(CircularBuffer* C_buffer,void*value);
-
-//retorna a quantidade de items em um buffer circular
-int size_buffer(CircularBuffer* C_buffer);
 
 // cria uma fila para até max mensagens de size bytes cada
 int mqueue_create (mqueue_t *queue, int max, int size) ;

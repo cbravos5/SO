@@ -48,6 +48,12 @@ struct itimerval default_timer ;
 //estrutura para gerar um temporizador nulo
 struct itimerval zero_timer = {0};
 
+void tick_handler(int signal);
+
+void verify_sleeping();
+
+
+
 task_t* scheduler()
 {
 	//Primeiro verifica-se o tamanho da fila de prontas para evitar problemas

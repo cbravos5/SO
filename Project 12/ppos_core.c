@@ -18,7 +18,7 @@ task_t mainTask;
 task_t disp;
 
 //ponteiro para controlar o cotexto atual (facilita a implementacao de funcoes)
-task_t *task_act;
+task_t *task_act = NULL;
 
 //ponteiro para fila de tarefas
 task_t *task_q = NULL; 
@@ -52,6 +52,49 @@ struct itimerval default_timer ;
 //variavel para gerar espera ocupada nas operacoes de semaforo
 int lock = 0 ;
 
+//////////////////////////////////////////////////////////
+
+//acorda fila de tarefas que deram join
+task_t* awake_queue(task_t *q);
+
+//bloqueia sessao critica e cria espera ocupada
+void enter_cs (int *lock);
+
+//libera sessao critica
+void leave_cs (int *lock);
+
+//imprime as marcacoes de tempo
+void print_time();
+
+//tick handler que nao gera preempcao
+void tick_handler_stop(int signal);
+
+//tick handler que gera preempcao
+void tick_handler(int signal);
+
+//verifica a fila de tarefas dormindo para saber se alguam precisa ser acordada
+void verify_sleeping();
+
+//suspende a tarefa atual e a coloca na fila passada
+task_t * t_suspend(task_t *q);
+
+//acorda a primeira tarefa de uma fila
+//(usada basicamente em sem_up())
+task_t * t_awake(task_t *q);
+
+//inicia um buffer circular de tamanho max
+CircularBuffer* Init_Buffer(int max,int size);
+
+//le a primeira posicao de um buffer circular
+int read_buffer(CircularBuffer* C_buffer, void*value);
+
+//escreve na ultima posicao de um buffer circular
+int write_buffer(CircularBuffer* C_buffer,void*value);
+
+//retorna o numero de elementos de um buffer circular
+int size_buffer(CircularBuffer* C_buffer);
+
+/////////////////////////////////////////////////////////
 
 void enter_cs (int *lock)
 {
@@ -100,7 +143,7 @@ task_t* scheduler()
 
 void dispatcher()
 {
-	task_t *next_task;
+	task_t *next_task = NULL;
 	while(user_tasks > 0)
 	{
 		next_task = scheduler();
@@ -112,9 +155,10 @@ void dispatcher()
 			switch(next_task->state)
 			{
 				//tarefa terminada; remove da fila de prontas e libera memoria.
-				case 't': queue_remove((queue_t**)&prontas,(queue_t*)next_task);
-						  free(next_task->context.uc_stack.ss_sp);
-						  next_task = NULL; break;
+				case 't':queue_remove((queue_t**)&prontas,(queue_t*)next_task);
+						 free(next_task->context.uc_stack.ss_sp);
+						 next_task = NULL; break;
+							
 				//tarefa volta para o final da fila de prontas.
 				case 'p': queue_remove((queue_t**)&prontas,(queue_t*)next_task);
 						  queue_append((queue_t**)&prontas,(queue_t*)next_task);
@@ -282,8 +326,8 @@ int task_switch (task_t *task)
 	task->proc_time_in = system_time;
 	task->activate_count++;
 	task_act->proc_time = task_act->proc_time + (system_time - task_act->proc_time_in); 
-
-	task_t* swap_task = task_act;
+	task_t* swap_task = NULL;
+	swap_task = task_act;
 	task_act = task;
 	if((swapcontext(&(swap_task->context),&(task_act->context))) == -1)
 		return -1;
@@ -505,14 +549,14 @@ int sem_destroy (semaphore_t *s)
 
 CircularBuffer* Init_Buffer(int max,int size)
 {
-	CircularBuffer* p = malloc(sizeof(CircularBuffer*));
+	CircularBuffer* p = malloc(sizeof(CircularBuffer));
 	if(p == NULL)
 		return NULL;
 	p->max = max;
 	p->write = p->read = 0;
 	p->size = size;
 	p->full = 0;
-	p->buffer = malloc(max*sizeof(size));
+	p->buffer = malloc(max*size);
 	if (p->buffer == NULL)
 		return NULL;
 	return p;
@@ -571,34 +615,34 @@ int mqueue_create (mqueue_t *queue, int max, int size)
 
 int mqueue_send (mqueue_t *queue, void *msg)
 {
-	printf("Tarefa %d enviando mensagem\n",task_act->id);
+	//printf("Tarefa %d enviando mensagem\n",task_act->id);
 	if(queue->state == 't') return -1;
 	if(sem_down(&queue->s_vaga)) return -1;
 	if(sem_down(&queue->s_buffer)) return -1;
 	if(write_buffer(queue->buff,msg)) return -1;
 	if(sem_up(&queue->s_buffer)) return -1;
 	if(sem_up(&queue->s_item)) return -1;
-	if(task_act->id == 2)
+	/*if(task_act->id == 2)
 		printf("Tarefa %d enviou mensagem %f\n",task_act->id,*(double*)msg);
 	else
-		printf("Tarefa %d enviou mensagem %d\n",task_act->id,*(int*)msg);
+		printf("Tarefa %d enviou mensagem %d\n",task_act->id,*(int*)msg);*/
 	return 0;
 }
 
 
 int mqueue_recv (mqueue_t *queue, void *msg)
 {
-	printf("Tarefa %d recebendo mensagem\n",task_act->id);
+	//printf("Tarefa %d recebendo mensagem\n",task_act->id);
 	if(queue->state == 't') return -1;
 	if(sem_down(&queue->s_item)) return -1;
 	if(sem_down(&queue->s_buffer)) return -1;
 	if(read_buffer(queue->buff,msg));
 	if(sem_up(&queue->s_buffer)) return -1;
 	if(sem_up(&queue->s_vaga)) return -1;
-	if(task_act->id > 2)
+	/*if(task_act->id > 2)
 		printf("Tarefa %d recebeu mensagem %f\n",task_act->id,*(double*)msg);
 	else
-		printf("Tarefa %d recebeu mensagem %d\n",task_act->id,*(int*)msg);
+		printf("Tarefa %d recebeu mensagem %d\n",task_act->id,*(int*)msg);*/
 	return 0;
 }
 
@@ -610,8 +654,7 @@ int mqueue_destroy (mqueue_t *queue)
 	if(sem_destroy(&queue->s_vaga)) return -1;
 	if(sem_destroy(&queue->s_buffer)) return -1;
 	queue->state = 't';
-	//free(queue->buff);
-	//free(queue);
+	free(queue->buff);
 	return 0;	
 }
 

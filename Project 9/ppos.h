@@ -1,4 +1,8 @@
-//GRR20186313 Chrystopher Naves Bravos
+// PingPongOS - PingPong Operating System
+// Prof. Carlos A. Maziero, DINF UFPR
+// Versão 1.2 -- Outubro de 2016
+
+// Interface do núcleo para as aplicações
 
 #ifndef __PPOS__
 #define __PPOS__
@@ -21,10 +25,6 @@
 #endif
 
 // funções gerais ==============================================================
-task_t* scheduler();
-
-void dispatcher();
-
 
 // Inicializa o sistema operacional; deve ser chamada no inicio do main()
 void ppos_init () ;
@@ -64,14 +64,8 @@ int task_join (task_t *task) ;
 
 // operações de gestão do tempo ================================================
 
-//trata a tarefa corrente de acordo com o numero de ticks
-void tick_handler(int signal);
-
 // suspende a tarefa corrente por t milissegundos
 void task_sleep (int t) ;
-
-//verifica a fila de tarefas dormindo para saber se precisa retirar alguma
-void verify_sleeping();
 
 // retorna o relógio atual (em milisegundos)
 unsigned int systime () ;

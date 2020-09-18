@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <mcheck.h>
 #include "ppos.h"
 
 task_t prod[3], somador, cons[2] ;
@@ -33,7 +34,7 @@ void prodBody (void * saida)
       printf ("T%d enviou %d\n", task_id(), valor) ;
 
       // dorme um intervalo aleatorio
-      task_sleep (random() % 3000) ;
+      task_sleep (random() % 1000) ;
    }
 }
 
@@ -63,7 +64,7 @@ void somaBody (void * arg)
       mqueue_send (&queueRaizes, &raiz) ;
 
       // dorme um intervalo aleatorio
-      task_sleep (random() % 3000) ;
+      task_sleep (random() % 1000) ;
    }
    task_exit(0) ;
 }
@@ -86,12 +87,13 @@ void consBody (void * arg)
               task_id(), valor) ;
 
       // dorme um intervalo aleatorio
-      task_sleep (random() % 3000) ;
+      task_sleep (random() % 1000) ;
    }
 }
 
 int main (int argc, char *argv[])
 {
+   mtrace();
    printf ("main: inicio\n") ;
 
    ppos_init () ;
@@ -109,7 +111,9 @@ int main (int argc, char *argv[])
    task_create (&prod[1], prodBody, NULL) ;
    task_create (&prod[2], prodBody, NULL) ;
 
+
    // aguarda o somador encerrar
+      printf("main aguardado somador encerrar\n");
    task_join (&somador) ;
 
    // destroi as filas de mensagens
@@ -120,6 +124,7 @@ int main (int argc, char *argv[])
 
    // encerra a thread main
    printf ("main: fim\n") ;
+   muntrace();
    task_exit (0) ;
 
    exit (0) ;

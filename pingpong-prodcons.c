@@ -17,7 +17,7 @@ void produtor(void * arg)
 {
    int item;
    int_queue *aux = NULL;
-   while (1)
+   for(int i =0; i < 10; i++)
    {
       task_sleep (1000);
       aux = malloc(sizeof(int_queue*));
@@ -31,6 +31,7 @@ void produtor(void * arg)
       printf("Produtor %s produziu %d\n",(char *)arg,item);
       sem_up (&s_item);
    }
+   task_exit(0);
 }
 
 
@@ -38,7 +39,7 @@ void consumidor(void * arg)
 {
    int item;
    int_queue *aux = NULL;
-   while (1)
+   for(int i =0; i < 10; i++)
    {
       sem_down (&s_item);
 
@@ -53,6 +54,7 @@ void consumidor(void * arg)
       free(aux);
       task_sleep (1000);
    }
+   task_exit(0);
 }
 
 
@@ -64,7 +66,7 @@ int main (int argc, char *argv[])
 
    // cria semaforos
    sem_create (&s_item, 0) ;
-   sem_create (&s_vaga, 5) ;
+   sem_create (&s_vaga, 10) ;
    sem_create (&s_buffer, 1);
 
    srand(time(0)); 
