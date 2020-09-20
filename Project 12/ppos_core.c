@@ -615,34 +615,24 @@ int mqueue_create (mqueue_t *queue, int max, int size)
 
 int mqueue_send (mqueue_t *queue, void *msg)
 {
-	//printf("Tarefa %d enviando mensagem\n",task_act->id);
 	if(queue->state == 't') return -1;
 	if(sem_down(&queue->s_vaga)) return -1;
 	if(sem_down(&queue->s_buffer)) return -1;
 	if(write_buffer(queue->buff,msg)) return -1;
 	if(sem_up(&queue->s_buffer)) return -1;
 	if(sem_up(&queue->s_item)) return -1;
-	/*if(task_act->id == 2)
-		printf("Tarefa %d enviou mensagem %f\n",task_act->id,*(double*)msg);
-	else
-		printf("Tarefa %d enviou mensagem %d\n",task_act->id,*(int*)msg);*/
 	return 0;
 }
 
 
 int mqueue_recv (mqueue_t *queue, void *msg)
 {
-	//printf("Tarefa %d recebendo mensagem\n",task_act->id);
 	if(queue->state == 't') return -1;
 	if(sem_down(&queue->s_item)) return -1;
 	if(sem_down(&queue->s_buffer)) return -1;
 	if(read_buffer(queue->buff,msg));
 	if(sem_up(&queue->s_buffer)) return -1;
 	if(sem_up(&queue->s_vaga)) return -1;
-	/*if(task_act->id > 2)
-		printf("Tarefa %d recebeu mensagem %f\n",task_act->id,*(double*)msg);
-	else
-		printf("Tarefa %d recebeu mensagem %d\n",task_act->id,*(int*)msg);*/
 	return 0;
 }
 
